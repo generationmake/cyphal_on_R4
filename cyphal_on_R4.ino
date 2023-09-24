@@ -58,7 +58,7 @@ ExecuteCommand::Response_1_1 onExecuteCommand_1_1_Request_Received(ExecuteComman
 DEBUG_INSTANCE(80, Serial);
 
 cyphal::Node::Heap<cyphal::Node::DEFAULT_O1HEAP_SIZE> node_heap;
-cyphal::Node node_hdl(node_heap.data(), node_heap.size(), micros, [] (CanardFrame const & frame) { CanMsg const msg(CanStandardId(frame.extended_can_id), frame.payload_size, (const uint8_t*)frame.payload); return CAN.write(msg); });
+cyphal::Node node_hdl(node_heap.data(), node_heap.size(), micros, [] (CanardFrame const & frame) { CanMsg const msg(CanExtendedId(frame.extended_can_id), frame.payload_size, (const uint8_t*)frame.payload); return CAN.write(msg); });
 
 cyphal::Publisher<Heartbeat_1_0> heartbeat_pub = node_hdl.create_publisher<Heartbeat_1_0>(1*1000*1000UL /* = 1 sec in usecs. */);
 cyphal::Publisher<uavcan::primitive::scalar::Bit_1_0> estop_pub;
@@ -272,7 +272,7 @@ void loop()
   {
     CanMsg const msg = CAN.read();
     CanardFrame frame;
-    frame.extended_can_id=msg.id;
+    frame.extended_can_id=msg.getExtendedId();
     frame.payload_size=msg.data_length;
     frame.payload=msg.data;
     node_hdl.onCanFrameReceived(frame);
