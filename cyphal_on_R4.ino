@@ -38,9 +38,9 @@ using namespace uavcan::node;
 
 static uint8_t const EEPROM_I2C_DEV_ADDR = 0x50;
 
-static int const EMERGENCY_PIN    =  6; /* INPUT0 */
+static int const INPUT_PIN    =  6; /* INPUT0 */
 
-static uint16_t const UPDATE_PERIOD_ESTOP_ms     = 50;
+static uint16_t const UPDATE_PERIOD_INPUT_ms     = 50;
 static uint16_t const UPDATE_PERIOD_HEARTBEAT_ms = 1000;
 
 static uint32_t const WATCHDOG_DELAY_ms = 1000;
@@ -66,7 +66,7 @@ cyphal::Node node_hdl(node_heap.data(), node_heap.size(), micros,
                       });
 
 cyphal::Publisher<Heartbeat_1_0> heartbeat_pub = node_hdl.create_publisher<Heartbeat_1_0>(1*1000*1000UL /* = 1 sec in usecs. */);
-cyphal::Publisher<uavcan::primitive::scalar::Bit_1_0> estop_pub;
+cyphal::Publisher<uavcan::primitive::scalar::Bit_1_0> input_pub;
 
 uavcan::primitive::scalar::Integer8_1_0 light_mode_msg{0};
 cyphal::Subscription light_mode_subscription;
@@ -124,7 +124,7 @@ cyphal::support::platform::storage::littlefs::KeyValueStorage kv_storage(filesys
 
 static uint16_t     node_id            = std::numeric_limits<uint16_t>::max();
 static CanardPortID port_id_light_mode = std::numeric_limits<CanardPortID>::max();
-static CanardPortID port_id_estop      = std::numeric_limits<CanardPortID>::max();
+static CanardPortID port_id_input      = std::numeric_limits<CanardPortID>::max();
 
 #if __GNUC__ >= 11
 
@@ -134,8 +134,8 @@ const auto reg_rw_cyphal_node_id             = node_registry->expose("cyphal.nod
 const auto reg_ro_cyphal_node_description    = node_registry->route ("cyphal.node.description", {true}, []() { return "L3X-Z AUX_CONTROLLER"; });
 const auto reg_rw_cyphal_sub_light_mode_id   = node_registry->expose("cyphal.sub.light_mode.id", {true}, port_id_light_mode);
 const auto reg_ro_cyphal_sub_light_mode_type = node_registry->route ("cyphal.sub.light_mode.type", {true}, []() { return "uavcan.primitive.scalar.Integer8.1.0"; });
-const auto reg_rw_cyphal_pub_estop_id        = node_registry->expose("cyphal.pub.estop.id", {true}, port_id_estop);
-const auto reg_ro_cyphal_pub_estop_type      = node_registry->route ("cyphal.pub.estop.type", {true}, []() { return "uavcan.primitive.scalar.Bit.1.0"; });
+const auto reg_rw_cyphal_pub_input_id        = node_registry->expose("cyphal.pub.input.id", {true}, port_id_estop);
+const auto reg_ro_cyphal_pub_input_type      = node_registry->route ("cyphal.pub.input.type", {true}, []() { return "uavcan.primitive.scalar.Bit.1.0"; });
 
 #endif /* __GNUC__ >= 11 */
 
@@ -190,11 +190,11 @@ void setup()
 
   if (port_id_light_mode != std::numeric_limits<CanardPortID>::max())
     light_mode_subscription = node_hdl.create_subscription<uavcan::primitive::scalar::Integer8_1_0>(port_id_light_mode, [](uavcan::primitive::scalar::Integer8_1_0 const & msg) { light_mode_msg = msg; });
-  if (port_id_estop != std::numeric_limits<CanardPortID>::max())
-    estop_pub = node_hdl.create_publisher<uavcan::primitive::scalar::Bit_1_0>(port_id_estop, 1*1000*1000UL /* = 1 sec in usecs. */);
+  if (port_id_input != std::numeric_limits<CanardPortID>::max())
+    input_pub = node_hdl.create_publisher<uavcan::primitive::scalar::Bit_1_0>(port_id_input, 1*1000*1000UL /* = 1 sec in usecs. */);
 
-  DBG_INFO("Node ID: %d\n\r\tLIGHT ID = %d\n\r\tESTOP ID = %d",
-           node_id, port_id_light_mode, port_id_estop);
+  DBG_INFO("Node ID: %d\n\r\tLIGHT ID = %d\n\r\tINPUT ID = %d",
+           node_id, port_id_light_mode, port_id_input);
 
   /* NODE INFO **************************************************************************/
   static const auto node_info = node_hdl.create_node_info
@@ -222,7 +222,7 @@ void setup()
   digitalWrite(LED_BUILTIN, LOW);
 
   /* Setup emergency button pins. */
-  pinMode(EMERGENCY_PIN, INPUT_PULLUP);
+  pinMode(INPUT_PIN, INPUT_PULLUP);
 
   /* Initialize CAN */
   CAN.begin(CanBitRate::BR_250k);
@@ -291,7 +291,7 @@ void loop()
   /* Publish all the gathered data, although at various
    * different intervals.
    */
-  static unsigned long prev_estop = 0;
+  static unsigned long prev_input = 0;
   static unsigned long prev_heartbeat = 0;
 
   unsigned long const now = millis();
@@ -312,17 +312,15 @@ void loop()
     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
   }
 
-  if((now - prev_estop) > UPDATE_PERIOD_ESTOP_ms)
+  if((now - prev_input) > UPDATE_PERIOD_INPUT_ms)
   {
-    prev_estop = now;
+    prev_input = now;
 
-    bool const is_estop = digitalRead(EMERGENCY_PIN) == LOW;
+    uavcan::primitive::scalar::Bit_1_0 input_msg;
+    input_msg.value = digitalRead(INPUT_PIN);
 
-    uavcan::primitive::scalar::Bit_1_0 estop_msg;
-    estop_msg.value = (is_estop);
-
-    if (estop_pub)
-      estop_pub->publish(estop_msg);
+    if (input_pub)
+      input_pub->publish(input_msg);
   }
 
   /* Feed the watchdog only if not an async reset is
