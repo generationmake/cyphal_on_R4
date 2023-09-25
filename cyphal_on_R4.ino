@@ -11,6 +11,7 @@
 
 #include <Wire.h>
 #include <Arduino_CAN.h>
+#include <WDT.h>
 
 #include <107-Arduino-Cyphal.h>
 #include <107-Arduino-Cyphal-Support.h>
@@ -48,7 +49,6 @@ static uint32_t const WATCHDOG_DELAY_ms = 1000;
  * FUNCTION DECLARATION
  **************************************************************************************/
 
-//void onReceiveBufferFull(CanardFrame const & frame);
 ExecuteCommand::Response_1_1 onExecuteCommand_1_1_Request_Received(ExecuteCommand::Request_1_1 const &);
 
 /**************************************************************************************
@@ -263,8 +263,8 @@ void setup()
 //  mcp2515.setNormalMode();
 
   /* Enable watchdog. */
-//  rp2040.wdt_begin(WATCHDOG_DELAY_ms);
-//  rp2040.wdt_reset();
+  WDT.begin(WATCHDOG_DELAY_ms);
+  WDT.refresh();
 
   DBG_INFO("Init complete.");
 }
@@ -328,8 +328,8 @@ void loop()
   /* Feed the watchdog only if not an async reset is
    * pending because we want to restart via yakut.
    */
-//  if (!cyphal::support::platform::is_async_reset_pending())
-//    rp2040.wdt_reset();
+  if (!cyphal::support::platform::is_async_reset_pending())
+    WDT.refresh();
 }
 
 /**************************************************************************************
@@ -359,10 +359,9 @@ ExecuteCommand::Response_1_1 onExecuteCommand_1_1_Request_Received(ExecuteComman
       return rsp;
     }
     /* Feed the watchdog. */
-//    rp2040.wdt_reset();
+    WDT.refresh();
 #if __GNUC__ >= 11
-//    auto const rc_save = cyphal::support::save(kv_storage, *node_registry, []() { rp2040.wdt_reset(); });
-    auto const rc_save = cyphal::support::save(kv_storage, *node_registry, []() {  });
+    auto const rc_save = cyphal::support::save(kv_storage, *node_registry, []() { WDT.refresh(); });
     if (rc_save.has_value())
     {
       DBG_ERROR("cyphal::support::save failed with %d", static_cast<int>(rc_save.value()));
@@ -370,7 +369,7 @@ ExecuteCommand::Response_1_1 onExecuteCommand_1_1_Request_Received(ExecuteComman
       return rsp;
     }
     /* Feed the watchdog. */
-//    rp2040.wdt_reset();
+    WDT.refresh();
     rsp.status = ExecuteCommand::Response_1_1::STATUS_SUCCESS;
 #endif /* __GNUC__ >= 11 */
     (void)filesystem.unmount();
